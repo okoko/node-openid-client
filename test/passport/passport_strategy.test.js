@@ -70,7 +70,7 @@ describe('OpenIDConnectStrategy', () => {
   });
 
   describe('authenticate', function () {
-    it('forwards options.extras to callback as extras param', async function () {
+    it('forwards options.extras to callback as extras param', function (next) {
       const extras = {
         clientAssertionPayload: {
           aud: 'https://oidc.corp.com/default-oidc-provider',
@@ -81,7 +81,6 @@ describe('OpenIDConnectStrategy', () => {
         redirect_uri: 'http://domain.inc/oauth2/callback',
       };
 
-      const strategy = new Strategy({ client: this.client, params, extras }, () => {});
       const req = new MockRequest('GET', '/login/oidc');
       req.session = { 'oidc:op.example.com': sinon.match.object };
 
@@ -91,57 +90,58 @@ describe('OpenIDConnectStrategy', () => {
 
       this.client.callback = sinon.spy();
 
+      const strategy = new Strategy({ client: this.client, params, extras }, () => {
+        sinon.assert.calledOnce(this.client.callback);
+        sinon.assert.calledWith(
+          this.client.callback,
+          params.redirect_uri,
+          callbackParams,
+          sinon.match.object,
+          extras,
+        );
+        next();
+      });
       strategy.authenticate(req, {});
-      sinon.assert.calledOnce(this.client.callback);
-      sinon.assert.calledWith(
-        this.client.callback,
-        params.redirect_uri,
-        callbackParams,
-        sinon.match.object,
-        extras,
-      );
     });
   });
 
   describe('initate', function () {
-    it('starts authentication requests for GETs', function () {
+    it('starts authentication requests for GETs', function (next) {
       const params = { foo: 'bar' };
       const strategy = new Strategy({ client: this.client, params }, () => {});
 
       const req = new MockRequest('GET', '/login/oidc');
       req.session = {};
 
-      strategy.redirect = sinon.spy();
+      strategy.redirect = (target) => {
+        expect(params).to.eql({ foo: 'bar' });
+        expect(target).to.include('redirect_uri=');
+        expect(target).to.include('scope=');
+        expect(req.session).to.have.property('oidc:op.example.com');
+        expect(req.session['oidc:op.example.com']).to.have.keys('state', 'response_type', 'code_verifier');
+        next();
+      };
       strategy.authenticate(req);
-
-      expect(params).to.eql({ foo: 'bar' });
-      expect(strategy.redirect.calledOnce).to.be.true;
-      const target = strategy.redirect.firstCall.args[0];
-      expect(target).to.include('redirect_uri=');
-      expect(target).to.include('scope=');
-      expect(req.session).to.have.property('oidc:op.example.com');
-      expect(req.session['oidc:op.example.com']).to.have.keys('state', 'response_type', 'code_verifier');
     });
 
-    it('starts authentication requests for POSTs', function () {
+    it('starts authentication requests for POSTs', function (next) {
       const strategy = new Strategy({ client: this.client }, () => {});
 
       const req = new MockRequest('POST', '/login/oidc');
       req.session = {};
       req.body = {};
 
-      strategy.redirect = sinon.spy();
+      strategy.redirect = (target) => {
+        expect(target).to.include('redirect_uri=');
+        expect(target).to.include('scope=');
+        expect(req.session).to.have.property('oidc:op.example.com');
+        expect(req.session['oidc:op.example.com']).to.have.keys('state', 'response_type', 'code_verifier');
+        next();
+      };
       strategy.authenticate(req);
-
-      expect(strategy.redirect.calledOnce).to.be.true;
-      const target = strategy.redirect.firstCall.args[0];
-      expect(target).to.include('redirect_uri=');
-      expect(target).to.include('scope=');
-      expect(req.session).to.have.property('oidc:op.example.com');
-      expect(req.session['oidc:op.example.com']).to.have.keys('state', 'response_type', 'code_verifier');
     });
 
-    it('can have redirect_uri and scope specified', function () {
+    it('can have redirect_uri and scope specified', function (next) {
       const strategy = new Strategy({
         client: this.client,
         params: {
@@ -153,16 +153,15 @@ describe('OpenIDConnectStrategy', () => {
       const req = new MockRequest('GET', '/login/oidc');
       req.session = {};
 
-      strategy.redirect = sinon.spy();
+      strategy.redirect = (target) => {
+        expect(target).to.include(`redirect_uri=${encodeURIComponent('https://example.com/cb')}`);
+        expect(target).to.include('scope=openid%20profile');
+        next();
+      };
       strategy.authenticate(req);
-
-      expect(strategy.redirect.calledOnce).to.be.true;
-      const target = strategy.redirect.firstCall.args[0];
-      expect(target).to.include(`redirect_uri=${encodeURIComponent('https://example.com/cb')}`);
-      expect(target).to.include('scope=openid%20profile');
     });
 
-    it('can have authorization parameters specified at runtime', function () {
+    it('can have authorization parameters specified at runtime', function (next) {
       const strategy = new Strategy({
         client: this.client,
         params: {
@@ -174,15 +173,14 @@ describe('OpenIDConnectStrategy', () => {
       const req = new MockRequest('GET', '/login/oidc');
       req.session = {};
 
-      strategy.redirect = sinon.spy();
+      strategy.redirect = (target) => {
+        expect(target).to.include(`resource=${encodeURIComponent('urn:example:foo')}`);
+        next();
+      };
       strategy.authenticate(req, { resource: 'urn:example:foo' });
-
-      expect(strategy.redirect.calledOnce).to.be.true;
-      const target = strategy.redirect.firstCall.args[0];
-      expect(target).to.include(`resource=${encodeURIComponent('urn:example:foo')}`);
     });
 
-    it('automatically includes nonce for where it applies', function () {
+    it('automatically includes nonce for where it applies', function (next) {
       const strategy = new Strategy({
         client: this.client,
         params: {
@@ -194,17 +192,16 @@ describe('OpenIDConnectStrategy', () => {
       const req = new MockRequest('GET', '/login/oidc');
       req.session = {};
 
-      strategy.redirect = sinon.spy();
+      strategy.redirect = (target) => {
+        expect(target).to.include('redirect_uri=');
+        expect(target).to.include('scope=');
+        expect(target).to.include('nonce=');
+        expect(target).to.include('response_mode=form_post');
+        expect(req.session).to.have.property('oidc:op.example.com');
+        expect(req.session['oidc:op.example.com']).to.have.keys('state', 'nonce', 'response_type', 'code_verifier');
+        next();
+      };
       strategy.authenticate(req);
-
-      expect(strategy.redirect.calledOnce).to.be.true;
-      const target = strategy.redirect.firstCall.args[0];
-      expect(target).to.include('redirect_uri=');
-      expect(target).to.include('scope=');
-      expect(target).to.include('nonce=');
-      expect(target).to.include('response_mode=form_post');
-      expect(req.session).to.have.property('oidc:op.example.com');
-      expect(req.session['oidc:op.example.com']).to.have.keys('state', 'nonce', 'response_type', 'code_verifier');
     });
 
     describe('use pkce', () => {
@@ -258,7 +255,7 @@ describe('OpenIDConnectStrategy', () => {
         }).to.throw('foobar is not valid/implemented PKCE code_challenge_method');
       });
 
-      it('can be set to use PKCE (S256)', function () {
+      it('can be set to use PKCE (S256)', function (next) {
         const strategy = new Strategy({
           client: this.client,
           usePKCE: 'S256',
@@ -267,18 +264,17 @@ describe('OpenIDConnectStrategy', () => {
         const req = new MockRequest('GET', '/login/oidc');
         req.session = {};
 
-        strategy.redirect = sinon.spy();
+        strategy.redirect = (target) => {
+          expect(target).to.include('code_challenge_method=S256');
+          expect(target).to.include('code_challenge=');
+          expect(req.session).to.have.property('oidc:op.example.com');
+          expect(req.session['oidc:op.example.com']).to.have.property('code_verifier');
+          next();
+        };
         strategy.authenticate(req);
-
-        expect(strategy.redirect.calledOnce).to.be.true;
-        const target = strategy.redirect.firstCall.args[0];
-        expect(target).to.include('code_challenge_method=S256');
-        expect(target).to.include('code_challenge=');
-        expect(req.session).to.have.property('oidc:op.example.com');
-        expect(req.session['oidc:op.example.com']).to.have.property('code_verifier');
       });
 
-      it('can be set to use PKCE (plain)', function () {
+      it('can be set to use PKCE (plain)', function (next) {
         const strategy = new Strategy({
           client: this.client,
           usePKCE: 'plain',
@@ -287,15 +283,14 @@ describe('OpenIDConnectStrategy', () => {
         const req = new MockRequest('GET', '/login/oidc');
         req.session = {};
 
-        strategy.redirect = sinon.spy();
+        strategy.redirect = (target) => {
+          expect(target).not.to.include('code_challenge_method');
+          expect(target).to.include('code_challenge=');
+          expect(req.session).to.have.property('oidc:op.example.com');
+          expect(req.session['oidc:op.example.com']).to.have.property('code_verifier');
+          next();
+        };
         strategy.authenticate(req);
-
-        expect(strategy.redirect.calledOnce).to.be.true;
-        const target = strategy.redirect.firstCall.args[0];
-        expect(target).not.to.include('code_challenge_method');
-        expect(target).to.include('code_challenge=');
-        expect(req.session).to.have.property('oidc:op.example.com');
-        expect(req.session['oidc:op.example.com']).to.have.property('code_verifier');
       });
     });
 
