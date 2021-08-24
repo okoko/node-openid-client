@@ -6,6 +6,7 @@ const { expect } = require('chai');
 
 const { Issuer, Strategy } = require('../../lib');
 const instance = require('../../lib/helpers/weak_cache');
+const { encode } = require('../../lib/helpers/base64url');
 
 describe('OpenIDConnectStrategy', () => {
   before(function () {
@@ -33,6 +34,8 @@ describe('OpenIDConnectStrategy', () => {
       respose_types: ['code'],
       redirect_uris: ['http://rp.example.com/cb'],
     });
+
+    this.key = `oidc:${encode(this.issuer.issuer)}`;
   });
 
   it('checks that client is a Client instance', () => {
@@ -82,7 +85,7 @@ describe('OpenIDConnectStrategy', () => {
       };
 
       const req = new MockRequest('GET', '/login/oidc');
-      req.session = { 'oidc:op.example.com': sinon.match.object };
+      req.session = { [this.key]: sinon.match.object };
 
       /* Fake callback params */
       const callbackParams = { code: 'some-code' };
@@ -117,8 +120,8 @@ describe('OpenIDConnectStrategy', () => {
         expect(params).to.eql({ foo: 'bar' });
         expect(target).to.include('redirect_uri=');
         expect(target).to.include('scope=');
-        expect(req.session).to.have.property('oidc:op.example.com');
-        expect(req.session['oidc:op.example.com']).to.have.keys('state', 'response_type', 'code_verifier');
+        expect(req.session).to.have.property(this.key);
+        expect(req.session[this.key]).to.have.keys('state', 'response_type', 'code_verifier');
         next();
       };
       strategy.authenticate(req);
@@ -134,8 +137,8 @@ describe('OpenIDConnectStrategy', () => {
       strategy.redirect = (target) => {
         expect(target).to.include('redirect_uri=');
         expect(target).to.include('scope=');
-        expect(req.session).to.have.property('oidc:op.example.com');
-        expect(req.session['oidc:op.example.com']).to.have.keys('state', 'response_type', 'code_verifier');
+        expect(req.session).to.have.property(this.key);
+        expect(req.session[this.key]).to.have.keys('state', 'response_type', 'code_verifier');
         next();
       };
       strategy.authenticate(req);
@@ -197,8 +200,8 @@ describe('OpenIDConnectStrategy', () => {
         expect(target).to.include('scope=');
         expect(target).to.include('nonce=');
         expect(target).to.include('response_mode=form_post');
-        expect(req.session).to.have.property('oidc:op.example.com');
-        expect(req.session['oidc:op.example.com']).to.have.keys('state', 'nonce', 'response_type', 'code_verifier');
+        expect(req.session).to.have.property(this.key);
+        expect(req.session[this.key]).to.have.keys('state', 'nonce', 'response_type', 'code_verifier');
         next();
       };
       strategy.authenticate(req);
@@ -267,8 +270,8 @@ describe('OpenIDConnectStrategy', () => {
         strategy.redirect = (target) => {
           expect(target).to.include('code_challenge_method=S256');
           expect(target).to.include('code_challenge=');
-          expect(req.session).to.have.property('oidc:op.example.com');
-          expect(req.session['oidc:op.example.com']).to.have.property('code_verifier');
+          expect(req.session).to.have.property(this.key);
+          expect(req.session[this.key]).to.have.property('code_verifier');
           next();
         };
         strategy.authenticate(req);
@@ -286,8 +289,8 @@ describe('OpenIDConnectStrategy', () => {
         strategy.redirect = (target) => {
           expect(target).not.to.include('code_challenge_method');
           expect(target).to.include('code_challenge=');
-          expect(req.session).to.have.property('oidc:op.example.com');
-          expect(req.session['oidc:op.example.com']).to.have.property('code_verifier');
+          expect(req.session).to.have.property(this.key);
+          expect(req.session[this.key]).to.have.property('code_verifier');
           next();
         };
         strategy.authenticate(req);
@@ -325,7 +328,7 @@ describe('OpenIDConnectStrategy', () => {
 
       const req = new MockRequest('GET', '/login/oidc/callback?code=foobar&state=state');
       req.session = {
-        'oidc:op.example.com': {
+        [this.key]: {
           nonce: 'nonce',
           state: 'state',
           response_type: 'code',
@@ -340,7 +343,7 @@ describe('OpenIDConnectStrategy', () => {
 
       const req = new MockRequest('GET', '/login/oidc/callback?error=server_error&state=state');
       req.session = {
-        'oidc:op.example.com': {
+        [this.key]: {
           nonce: 'nonce',
           state: 'state',
           response_type: 'code',
@@ -367,7 +370,7 @@ describe('OpenIDConnectStrategy', () => {
 
       strategy.error = (error) => {
         try {
-          expect(error.message).to.eql('did not find expected authorization request details in session, req.session["oidc:op.example.com"] is undefined');
+          expect(error.message).to.eql(`did not find expected authorization request details in session, req.session["${this.key}"] is undefined`);
           next();
         } catch (err) {
           next(err);
@@ -386,7 +389,7 @@ describe('OpenIDConnectStrategy', () => {
 
       const req = new MockRequest('GET', '/login/oidc/callback?code=code&state=state');
       req.session = {
-        'oidc:op.example.com': {
+        [this.key]: {
           nonce: 'nonce',
           state: 'state',
           response_type: 'code',
@@ -410,7 +413,7 @@ describe('OpenIDConnectStrategy', () => {
 
       const req = new MockRequest('GET', '/login/oidc/callback?error=login_required&state=state');
       req.session = {
-        'oidc:op.example.com': {
+        [this.key]: {
           nonce: 'nonce',
           state: 'state',
           response_type: 'code',
@@ -439,7 +442,7 @@ describe('OpenIDConnectStrategy', () => {
 
       const req = new MockRequest('GET', '/login/oidc/callback?code=foo&state=state');
       req.session = {
-        'oidc:op.example.com': {
+        [this.key]: {
           nonce: 'nonce',
           state: 'state',
           response_type: 'code',
@@ -468,7 +471,7 @@ describe('OpenIDConnectStrategy', () => {
 
       const req = new MockRequest('GET', '/login/oidc/callback?code=foo&state=state');
       req.session = {
-        'oidc:op.example.com': {
+        [this.key]: {
           nonce: 'nonce',
           response_type: 'code',
           state: 'state',
@@ -500,7 +503,7 @@ describe('OpenIDConnectStrategy', () => {
 
       const req = new MockRequest('GET', '/login/oidc/callback?code=foo&state=state');
       req.session = {
-        'oidc:op.example.com': {
+        [this.key]: {
           nonce: 'nonce',
           response_type: 'code',
           state: 'state',
@@ -522,7 +525,7 @@ describe('OpenIDConnectStrategy', () => {
 
       const req = new MockRequest('GET', '/login/oidc/callback?code=foo&state=state');
       req.session = {
-        'oidc:op.example.com': {
+        [this.key]: {
           nonce: 'nonce',
           response_type: 'code',
           state: 'state',
@@ -562,7 +565,7 @@ describe('OpenIDConnectStrategy', () => {
 
       const req = new MockRequest('GET', '/login/oidc/callback?code=foo&state=state');
       req.session = {
-        'oidc:op.example.com': {
+        [this.key]: {
           nonce: 'nonce',
           response_type: 'code',
           state: 'state',
@@ -598,7 +601,7 @@ describe('OpenIDConnectStrategy', () => {
 
       const req = new MockRequest('GET', '/login/oidc/callback?code=foo&state=state');
       req.session = {
-        'oidc:op.example.com': {
+        [this.key]: {
           nonce: 'nonce',
           response_type: 'code',
           state: 'state',

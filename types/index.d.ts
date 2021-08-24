@@ -801,7 +801,7 @@ export type StrategyVerifyCallbackReqUserInfo<
 export type StrategyVerifyCallbackReq<TUser> = (
   req: http.IncomingMessage,
   tokenset: TokenSet,
-  done: (err: any, user?: TUser) => void
+  done: (err: any, user?: TUser | false, info?: any) => void
 ) => void;
 
 export interface StrategyOptions<TClient extends Client> {
@@ -826,8 +826,21 @@ export interface StrategyOptions<TClient extends Client> {
   usePKCE?: boolean | string;
   /**
    * The property name to store transaction information such as nonce, state, max_age, code_verifier, and response_type.
+   * This is for default state store and must not be given if store is defined.
    */
   sessionKey?: string;
+  /**
+   * Object that saves the state during authorization.
+   */
+  store?: StateStore;
+}
+
+export interface StrategySession {
+  code_verifier?: string;
+  max_age?: number;
+  nonce?: string;
+  response_type?: string;
+  state: string;
 }
 
 // tslint:disable-next-line:no-unnecessary-class
@@ -849,6 +862,32 @@ export class Strategy<TUser, TClient extends Client> {
   redirect(url: string, status?: number): void;
   pass(): void;
   error(err: Error): void;
+}
+
+export interface StateStore<State = StrategySession> {
+  save(req: http.IncomingMessage, state: State, params: object): Promise<void> | void;
+  load(req: http.IncomingMessage, options: object): Promise<State | undefined> | State | undefined;
+}
+
+export class SessionStore<TClient extends Client, State = StrategySession> implements StateStore<State> {
+  constructor(client: TClient);
+  constructor(key: string);
+  save(req: http.IncomingMessage, state: State, params: object): void;
+  load(req: http.IncomingMessage, options: object): State | undefined;
+}
+
+export class CookieStore<TClient extends Client, State = StrategySession> implements StateStore<State> {
+  constructor(name: string, keys: { key: Buffer, iv: Buffer }[], maxAge?: number, sameSite?: boolean);
+  constructor(client: TClient, keys: { key: Buffer, iv: Buffer }[], maxAge?: number, sameSite?: boolean);
+  save(req: http.IncomingMessage, state: State, params: object): void;
+  load(req: http.IncomingMessage, options: object): State | undefined;
+}
+
+interface StrategyOptions<TClient extends Client> {
+  /**
+   * Response object for CookieStore to set the cookie. Defaults to `req.res`.
+   */
+  response?: http.ServerResponse;
 }
 
 /**
